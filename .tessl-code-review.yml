@@ -1,0 +1,45 @@
+schemaVersion: 1
+lenses:
+  - ref: tessl/code-review@0.5.0#review-correctness-and-data-integrity
+  - ref: tessl/code-review@0.5.0#review-security-and-privacy
+  - ref: tessl/code-review@0.5.0#review-maintainability-and-code-quality
+  - ref: tessl/code-review@0.5.0#review-scale-and-resilience
+  - ref: ./review-lenses/review-speckit-source-of-truth/SKILL.md
+    globs:
+      - specs/**
+      - pipeline/**
+      - templates/**
+      - generated/**
+      - .github/workflows/**
+      - tools/**
+      - docs/spec-kit/**
+      - catalog/**
+      - AGENTS.md
+      - .specify/**
+  - ref: ./review-lenses/review-demo-trading-correctness/SKILL.md
+    globs:
+      - specs/**
+      - pipeline/**
+      - templates/**
+      - generated/**
+  - ref: ./review-lenses/review-runtime-integration-accessible-learning/SKILL.md
+    globs:
+      - specs/**
+      - pipeline/**
+      - templates/account-service-specfirst/**
+      - templates/database-specfirst/**
+      - templates/people-service-specfirst/**
+      - templates/position-service-specfirst/**
+      - templates/reference-data-specfirst/**
+      - templates/trade-feed-specfirst/**
+      - templates/trade-processor-specfirst/**
+      - templates/trade-service-specfirst/**
+      - templates/web-front-end/**
+      - templates/state-*/**
+      - generated/**
+      - docs/**
+      - website/**
+      - new_website/**
+      - scripts/**
+      - README.md
+      - AGENTS.md
