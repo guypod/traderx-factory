@@ -138,6 +138,7 @@ shopt -u nullglob
 
 case "${STATE_ID}" in
   001-baseline-uncontainerized-parity)
+    copy_script_if_exists "doctor-base-uncontainerized-prerequisites.sh"
     copy_script_if_exists "start-base-uncontainerized-generated.sh"
     copy_script_if_exists "stop-base-uncontainerized-generated.sh"
     copy_script_if_exists "status-base-uncontainerized-generated.sh"
@@ -458,6 +459,12 @@ write_generated_runbook() {
     001-baseline-uncontainerized-parity)
       cat > "${TARGET_ROOT}/RUN_FROM_GENERATED.md" <<'EOF'
 # Run From Generated (State 001)
+
+Check prerequisites first (read-only; exits non-zero on blockers):
+
+```bash
+./scripts/doctor-base-uncontainerized-prerequisites.sh
+```
 
 Start:
 

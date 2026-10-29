@@ -96,3 +96,33 @@ connection retirement, and sequential accumulated positions in regression tests.
 ## Dependency remediation (#465)
 
 Use public Boot 4.0.8 with its Framework 7.0.9/Data JPA 4.0.7 baseline and Tomcat 11.0.26; adapt Springdoc, Jackson messaging adapters, and removed HTTP status APIs in canonical templates and inherited patchsets. Refresh Node security overrides and lockfiles. Preserve #461 booking behavior, regenerate 002 then 004 sequentially, and verify builds, booking tests, repository gates, and fresh dependency/image scans before snapshot publication. See `docs/operations/dependency-security-465.md` for advisory evidence and release status.
+
+## Prerequisite doctor (#1)
+
+Add a standalone, read-only `scripts/doctor-base-uncontainerized-prerequisites.sh`
+(FR-025 to FR-028, NFR-013) that only runs version/listing commands
+(`java -version`, `javac -version`, `node --version`, `npm --version`,
+`dotnet --version|--list-sdks|--list-runtimes`, `nc -h`, `command -v`). Supported
+versions come from existing canonical sources: Java 21 from template
+`sourceCompatibility`, Node.js from the Angular 20 engine range, .NET 9 from the
+people-service `net9.0` target and the start script runtime checks. The start
+script is not changed, so startup behavior and lifecycle contracts are preserved.
+`pipeline/install-generated-runtime-harness.sh` copies the doctor into state
+001 generated output alongside the other lifecycle scripts, and the learning
+guide generator adds a "Check Prerequisites" step so the run order is
+documented. `scripts/test-base-uncontainerized-prerequisite-doctor.sh` covers
+available, missing and incompatible tools with isolated stub executables
+(SC-018). No API or event contracts change.
+
+Probe hardening (FR-025 to FR-028): every probe must exit `0` and print an
+anchored version line before its version is parsed, and `dotnet --list-*`
+failures are blockers. When `JAVA_HOME` is set, the doctor checks it as the
+Gradle build JDK and separately checks the `java` on `PATH`, because the process
+catalog launches services with bare `java -jar` and the start script does not
+prepend `JAVA_HOME/bin`. The accepted build JDK range is 21 to 24, the range
+the Gradle 8.14.5 wrapper in `templates/gradle-wrapper` runs on; raise it with
+the wrapper. `nc -h` usage text must list `-z`, matching `wait_for_port`, with no
+socket opened. The `TRADERSPEC_SKIP_NETWORK_CHECK=1` curl warning is written into
+FR-025. The success line names `--build-only` alone when
+`pipeline/generate-state.sh` is absent (generated checkout). The start script is
+still unchanged.

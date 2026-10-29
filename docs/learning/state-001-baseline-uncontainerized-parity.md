@@ -33,6 +33,22 @@ title: "State 001: Simple App - Base Uncontainerized App"
 - **Runtime behavior:** Uses explicit host ports and direct cross-origin service calls.
 - **Learning takeaway:** This is the reference implementation all later state diffs are measured against.
 
+## Check Prerequisites
+
+Run this read-only doctor before generating or building. It installs nothing, starts nothing,
+reports every missing or incompatible tool with guidance, and exits non-zero on blockers.
+
+Supported toolchain: a JDK 21 to 24 (`java` and `javac` from the same JDK, not a JRE; Gradle 8.14 cannot run on 25+),
+with a `java` 21+ first on `PATH` even when `JAVA_HOME` is set, because services start with `java -jar`,
+Node.js `^20.19 || ^22.12 || >=24` with npm, .NET SDK 9.x (with the .NET and ASP.NET Core 9 runtimes),
+`rsync`, `nc` (netcat with `-z`), `jq` and `curl`.
+
+```bash
+./scripts/doctor-base-uncontainerized-prerequisites.sh
+```
+
+Run order: prerequisite doctor, then generation, then `--build-only`, then start.
+
 ## Run This State
 
 ```bash

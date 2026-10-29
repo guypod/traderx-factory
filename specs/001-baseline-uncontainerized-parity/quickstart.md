@@ -1,5 +1,13 @@
 # Quickstart: Simple App - Base Uncontainerized App
 
+## 0) Check Prerequisites
+
+Run the read-only prerequisite doctor first. It reports the Gradle build JDK (java and javac 21 to 24 from one JDK, not a JRE), the `java` on `PATH` used to start services, Node.js `^20.19 || ^22.12 || >=24` and npm, .NET SDK 9 with its runtimes, `rsync`, `nc` with `-z`, `jq` and `curl`, and exits non-zero on blockers. It installs nothing and starts nothing.
+
+```bash
+./scripts/doctor-base-uncontainerized-prerequisites.sh
+```
+
 ## 1) Regenerate Baseline Components
 
 ```bash

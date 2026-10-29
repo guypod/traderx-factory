@@ -246,3 +246,31 @@ trade-processor smoke test to cover these contracts.
 - HTTP payloads, Socket.IO/NATS envelopes, null omission, H2 constraint lifetime, and after-commit publication behavior remain compatible.
 - Regeneration must preserve these targets in templates, patchsets, manifests, and resolved dependencies. Security thresholds remain unchanged.
 - Evidence and release validation are recorded in `docs/operations/dependency-security-465.md`.
+
+## Prerequisite doctor (#1)
+
+A developer preparing state 001 needs one explicit, read-only check that reports
+whether the local toolchain can generate, build and run the baseline before any
+build starts. This is a narrow slice inspired by finos/traderX#388 (JRE versus
+JDK confusion, netcat/rsync and multi-runtime prerequisites).
+
+- **FR-025**: The repository MUST provide `scripts/doctor-base-uncontainerized-prerequisites.sh`, which reports on: a Gradle build JDK (`JAVA_HOME` when set, otherwise `PATH`) whose `java` and `javac` share one major version in the range 21 to 24, the range the pinned Gradle 8.14 wrapper can run on (flagging a JRE without `javac`, too-old or too-new versions and mixed major versions, and still reporting a missing `javac` when `java` is also missing); when `JAVA_HOME` is set, the `java` on `PATH` that starts the services with bare `java -jar`, which must be 21+; Node.js `^20.19 || ^22.12 || >=24` (Angular 20) and npm; .NET SDK 9.x with `Microsoft.NETCore.App` and `Microsoft.AspNetCore.App` 9.x runtimes; `rsync`; `nc` with `-z` support, confirmed from its local `nc -h` usage text; `jq`; and `curl`. Each missing or incompatible tool MUST produce a `[fail]` line with actionable `[hint]` guidance. The one exception mirrors the start script: with `TRADERSPEC_SKIP_NETWORK_CHECK=1` the network preflight does not run, so a missing `curl` produces a `[warn]` line instead and is not a blocker.
+- **FR-027**: A version or listing probe passes only when its command exits `0` and prints the expected version line (`openjdk|java version "X"`, `javac X`, `vX.Y.Z` for node, `X.Y.Z` for npm, `X.Y.Z [path]` entries for `dotnet --list-sdks|--list-runtimes`). Plausible version text from a command that exits non-zero, or digits in unrelated diagnostic output, MUST be reported as a `[fail]`.
+- **FR-028**: On success the doctor MUST name a next step that exists in the checkout it runs from: generation then `--build-only` in the source repository, and `--build-only` alone in a generated checkout without `pipeline/generate-state.sh`.
+- **FR-026**: The doctor MUST report every blocker in one run and exit non-zero when at least one blocker is found, and exit `0` otherwise.
+- **NFR-013 (Non-Destructive Prerequisite Check)**: The doctor MUST NOT install packages, run privileged commands, change network or account configuration, contact the network, build, or start TraderX processes. Existing start/stop/status script behavior is unchanged; the doctor runs only when a developer invokes it.
+
+Acceptance scenarios:
+
+1. **Given** a complete toolchain, **When** the doctor runs, **Then** it prints `[ok]` for every tool and exits `0`.
+2. **Given** `java` without `javac` (a JRE), Java 8, or a `javac` from a different JDK major version, **When** the doctor runs, **Then** it names the Java problem, gives JDK 21 guidance and exits non-zero.
+3. **Given** Node.js 18, missing npm, missing or unrunnable `dotnet`, or a .NET SDK/runtime older than 9, **When** the doctor runs, **Then** it names the problem and exits non-zero.
+4. **Given** missing `rsync` and `nc`, or missing `java` and `javac`, **When** the doctor runs, **Then** it reports both blockers in one pass and exits non-zero.
+5. **Given** a `java`, `javac`, `node`, `npm` or `dotnet --list-*` probe that prints a plausible version and exits non-zero, or that prints only a misleading diagnostic with digits, **When** the doctor runs, **Then** it reports that probe as failed and exits non-zero.
+6. **Given** `JAVA_HOME` pointing at JDK 21 while `PATH` resolves Java 8 or no `java`, **When** the doctor runs, **Then** it reports the service runtime blocker and exits non-zero; **Given** `PATH` resolves the same `java` as `JAVA_HOME`, **Then** it passes.
+7. **Given** JDK 25, or an `nc` whose usage text does not list `-z`, **When** the doctor runs, **Then** it names the incompatibility and exits non-zero.
+8. **Given** missing `curl`, **When** the doctor runs, **Then** it fails; with `TRADERSPEC_SKIP_NETWORK_CHECK=1` it warns and exits `0`.
+
+- **SC-018**: `scripts/test-base-uncontainerized-prerequisite-doctor.sh` passes, exercising available, missing and incompatible executables through isolated stub PATHs, and asserts the doctor contains no install, privileged or startup commands.
+
+Limits: the doctor checks executables on `PATH` (and `JAVA_HOME` when set) in the shell it runs from; a different shell, profile or IDE at start time can resolve different tools. The `nc -z` check reads `nc -h` usage text and does not open a socket. It does not verify CPU architecture compatibility beyond whether `dotnet --version` runs, Gradle/npm/NuGet network reachability (the start script's network preflight still owns that), or free ports. The stub tests validate logic on Linux bash; real macOS/Windows toolchain output is not exercised by CI.

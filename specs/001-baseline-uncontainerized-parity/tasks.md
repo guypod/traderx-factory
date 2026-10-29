@@ -87,3 +87,15 @@ description: "Tasks for root-level Spec Kit simple app baseline adoption"
 - [x] Preserve and run H2 booking/after-commit regression tests on the new baseline.
 - [x] Verify final regenerated 002/004 outputs, application builds, and all repository gates.
 - [x] Pass fresh dependency and image scans and publish replacement snapshots with one commit above each parent.
+
+## Prerequisite doctor (#1)
+
+- [x] Add FR-025, FR-026, NFR-013 and SC-018 with acceptance scenarios and limits to `spec.md`.
+- [x] Implement read-only `scripts/doctor-base-uncontainerized-prerequisites.sh` (Java/javac 21, Node/npm, .NET 9 SDK and runtimes, rsync, nc, jq, curl) with actionable hints and non-zero exit on blockers.
+- [x] Add `scripts/test-base-uncontainerized-prerequisite-doctor.sh` with isolated stubs for healthy, JRE-only, Java 8, mixed JDK, Node 18, missing npm, missing/unrunnable dotnet, old .NET, missing rsync/nc and multi-blocker scenarios.
+- [x] Ship the doctor in state 001 generated runtime harness and document supported versions and run order through the catalog-driven learning guide and the quickstart.
+- [x] Run front-matter, root SpecKit, readiness and spec-coverage gates plus the doctor test; record what could not run locally.
+- [x] Require successful, anchored version/listing probes (FR-027) with regression cases for nonzero exits with plausible output and misleading numeric stderr for java, javac, node, npm and `dotnet --list-sdks|--list-runtimes`.
+- [x] Check the `PATH` java used by `java -jar` separately from the `JAVA_HOME` Gradle JDK, with split-environment cases (JAVA_HOME 21 with PATH Java 8, no PATH java, same JDK, JAVA_HOME 8).
+- [x] Cap the build JDK at Java 24 for the Gradle 8.14 wrapper, report a missing `javac` when `java` is also missing, require `nc -z` support, and record the `TRADERSPEC_SKIP_NETWORK_CHECK=1` curl exception in FR-025.
+- [x] Make the success next step valid in generated checkouts (FR-028) and test both checkouts.
