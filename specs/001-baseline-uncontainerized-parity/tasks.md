@@ -87,3 +87,11 @@ description: "Tasks for root-level Spec Kit simple app baseline adoption"
 - [x] Preserve and run H2 booking/after-commit regression tests on the new baseline.
 - [x] Verify final regenerated 002/004 outputs, application builds, and all repository gates.
 - [x] Pass fresh dependency and image scans and publish replacement snapshots with one commit above each parent.
+
+## Prerequisite doctor (#1)
+
+- [x] Add FR-025, FR-026, NFR-013 and SC-018 with acceptance scenarios and limits to `spec.md`.
+- [x] Implement read-only `scripts/doctor-base-uncontainerized-prerequisites.sh` (Java/javac 21, Node/npm, .NET 9 SDK and runtimes, rsync, nc, jq, curl) with actionable hints and non-zero exit on blockers.
+- [x] Add `scripts/test-base-uncontainerized-prerequisite-doctor.sh` with isolated stubs for healthy, JRE-only, Java 8, mixed JDK, Node 18, missing npm, missing/unrunnable dotnet, old .NET, missing rsync/nc and multi-blocker scenarios.
+- [x] Ship the doctor in state 001 generated runtime harness and document supported versions and run order through the catalog-driven learning guide and the quickstart.
+- [x] Run front-matter, root SpecKit, readiness and spec-coverage gates plus the doctor test; record what could not run locally.

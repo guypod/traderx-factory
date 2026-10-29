@@ -312,6 +312,25 @@ const writeLearningGuides = () => {
     const compareLinks = compareLinksMarkdown(state, previousIds)
     const deltaBullets = plainEnglishDeltaFor(state)
     const runtimeCommand = state.generation?.runtime ?? state.generation?.entrypoint ?? 'not defined'
+    const prerequisitesCommand = state.generation?.prerequisites
+    const prerequisitesSection = prerequisitesCommand
+      ? `## Check Prerequisites
+
+Run this read-only doctor before generating or building. It installs nothing, starts nothing,
+reports every missing or incompatible tool with guidance, and exits non-zero on blockers.
+
+Supported toolchain: a JDK 21+ (\`java\` and \`javac\` from the same JDK, not a JRE),
+Node.js \`^20.19 || ^22.12 || >=24\` with npm, .NET SDK 9.x (with the .NET and ASP.NET Core 9 runtimes),
+\`rsync\`, \`nc\` (netcat), \`jq\` and \`curl\`.
+
+\`\`\`bash
+${prerequisitesCommand}
+\`\`\`
+
+Run order: prerequisite doctor, then generation, then \`--build-only\`, then start.
+
+`
+      : ''
     const adrRoute = adrRouteFor(state.decisionRecord)
     const researchRoute = stateDocRouteIfExists(state, 'research.md', 'research')
     const dataModelRoute = stateDocRouteIfExists(state, 'data-model.md', 'data-model')
@@ -352,7 +371,7 @@ ${compareLinks.map((line) => `- ${line}`).join('\n')}
 
 ${deltaBullets.map((line) => `- ${line}`).join('\n')}
 
-## Run This State
+${prerequisitesSection}## Run This State
 
 \`\`\`bash
 ${runtimeCommand}

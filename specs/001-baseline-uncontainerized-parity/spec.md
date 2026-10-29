@@ -246,3 +246,25 @@ trade-processor smoke test to cover these contracts.
 - HTTP payloads, Socket.IO/NATS envelopes, null omission, H2 constraint lifetime, and after-commit publication behavior remain compatible.
 - Regeneration must preserve these targets in templates, patchsets, manifests, and resolved dependencies. Security thresholds remain unchanged.
 - Evidence and release validation are recorded in `docs/operations/dependency-security-465.md`.
+
+## Prerequisite doctor (#1)
+
+A developer preparing state 001 needs one explicit, read-only check that reports
+whether the local toolchain can generate, build and run the baseline before any
+build starts. This is a narrow slice inspired by finos/traderX#388 (JRE versus
+JDK confusion, netcat/rsync and multi-runtime prerequisites).
+
+- **FR-025**: The repository MUST provide `scripts/doctor-base-uncontainerized-prerequisites.sh`, which reports on: a Java 21+ runtime and a `javac` compiler from the same JDK (flagging a JRE without `javac`, too-old versions and mixed major versions); Node.js `^20.19 || ^22.12 || >=24` (Angular 20) and npm; .NET SDK 9.x with `Microsoft.NETCore.App` and `Microsoft.AspNetCore.App` 9.x runtimes; `rsync`; `nc`; `jq`; and `curl`. Each missing or incompatible tool MUST produce a `[fail]` line with actionable `[hint]` guidance.
+- **FR-026**: The doctor MUST report every blocker in one run and exit non-zero when at least one blocker is found, and exit `0` otherwise.
+- **NFR-013 (Non-Destructive Prerequisite Check)**: The doctor MUST NOT install packages, run privileged commands, change network or account configuration, contact the network, build, or start TraderX processes. Existing start/stop/status script behavior is unchanged; the doctor runs only when a developer invokes it.
+
+Acceptance scenarios:
+
+1. **Given** a complete toolchain, **When** the doctor runs, **Then** it prints `[ok]` for every tool and exits `0`.
+2. **Given** `java` without `javac` (a JRE), Java 8, or a `javac` from a different JDK major version, **When** the doctor runs, **Then** it names the Java problem, gives JDK 21 guidance and exits non-zero.
+3. **Given** Node.js 18, missing npm, missing or unrunnable `dotnet`, or a .NET SDK/runtime older than 9, **When** the doctor runs, **Then** it names the problem and exits non-zero.
+4. **Given** missing `rsync` and `nc`, **When** the doctor runs, **Then** it reports both blockers in one pass and exits non-zero.
+
+- **SC-018**: `scripts/test-base-uncontainerized-prerequisite-doctor.sh` passes, exercising available, missing and incompatible executables through isolated stub PATHs, and asserts the doctor contains no install, privileged or startup commands.
+
+Limits: the doctor checks executables on `PATH` (and `JAVA_HOME` when set). It does not verify CPU architecture compatibility beyond whether `dotnet --version` runs, Gradle/npm/NuGet network reachability (the start script's network preflight still owns that), or free ports. The stub tests validate logic on Linux bash; real macOS/Windows toolchain output is not exercised by CI.

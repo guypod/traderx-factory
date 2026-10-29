@@ -72,6 +72,7 @@
       "generation": {
         "mode": "implemented",
         "entrypoint": "bash pipeline/generate-from-spec.sh",
+        "prerequisites": "./scripts/doctor-base-uncontainerized-prerequisites.sh",
         "runtime": "CORS_ALLOWED_ORIGINS=http://localhost:18093 ./scripts/start-base-uncontainerized-generated.sh"
       },
       "publish": {

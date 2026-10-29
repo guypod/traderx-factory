@@ -1,5 +1,13 @@
 # Quickstart: Simple App - Base Uncontainerized App
 
+## 0) Check Prerequisites
+
+Run the read-only prerequisite doctor first. It reports Java/javac 21 (JDK, not JRE), Node.js `^20.19 || ^22.12 || >=24` and npm, .NET SDK 9 with its runtimes, `rsync`, `nc`, `jq` and `curl`, and exits non-zero on blockers. It installs nothing and starts nothing.
+
+```bash
+./scripts/doctor-base-uncontainerized-prerequisites.sh
+```
+
 ## 1) Regenerate Baseline Components
 
 ```bash
