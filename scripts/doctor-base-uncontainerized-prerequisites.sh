@@ -9,10 +9,15 @@ usage() {
 usage: ./scripts/doctor-base-uncontainerized-prerequisites.sh
 
 Checks the local toolchain needed to generate, build and run state 001:
-  - JDK 21+ (java runtime and javac compiler, same major version)
+  - Gradle build JDK 21-24 (java and javac, same major version; JAVA_HOME when
+    set, otherwise PATH). Gradle 8.14.x cannot run on Java 25+.
+  - java 21+ on PATH, which starts the services with bare 'java -jar'
   - Node.js ^20.19 || ^22.12 || >=24 and npm
   - .NET SDK 9.x plus Microsoft.NETCore.App / Microsoft.AspNetCore.App 9.x runtimes
-  - rsync, nc (netcat), jq, curl
+  - rsync, nc (netcat with -z), jq, curl
+
+A probe passes only when its command exits 0 and prints the expected version
+line; output from a failed command is never trusted.
 
 Exit status: 0 when no blockers were found, 1 when at least one blocker was found.
 Set TRADERSPEC_SKIP_NETWORK_CHECK=1 to downgrade a missing curl to a warning
@@ -26,6 +31,16 @@ case "${1:-}" in
   *) echo "[error] unknown argument: $1"; usage; exit 2 ;;
 esac
 
+# Repository or generated-checkout root, resolved with builtins only.
+SCRIPT_DIR="."
+[[ "${BASH_SOURCE[0]}" == */* ]] && SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# The Gradle wrapper pinned in templates/gradle-wrapper (8.14.x) runs on Java 21-24;
+# Java 25 needs Gradle 9.1+. Raise this together with the wrapper.
+JAVA_MIN=21
+GRADLE_MAX_JAVA=24
+
 BLOCKERS=0
 WARNINGS=0
 
@@ -33,11 +48,6 @@ ok() { echo "[ok] $*"; }
 warn() { echo "[warn] $*"; WARNINGS=$((WARNINGS + 1)); }
 fail() { echo "[fail] $*"; BLOCKERS=$((BLOCKERS + 1)); }
 hint() { echo "[hint] $*"; }
-
-# Extract the first dotted version number (for example 21.0.2 or 1.8.0) from text.
-first_version() {
-  grep -Eo '[0-9]+(\.[0-9]+)+|[0-9]+' <<<"$1" | head -n 1
-}
 
 # Java reports legacy versions as 1.8.0; map those to their major (8).
 java_major() {
@@ -49,100 +59,139 @@ java_major() {
   echo "${major}"
 }
 
+# Prints the version from '<java> -version' only when the command exits 0 and
+# prints a genuine 'openjdk version "X"' / 'java version "X"' line. Diagnostic
+# lines such as 'Picked up JAVA_TOOL_OPTIONS: -Dapp.version=21.0.0' are ignored.
+probe_java_version() {
+  local out
+  out="$("$1" -version 2>&1)" || return 1
+  grep -Eo '^(openjdk|java) version "[0-9]+(\.[0-9]+)*' <<<"${out}" | head -n 1 | sed -E 's/.*"//'
+}
+
+# Prints the version from '<javac> -version' only on exit 0 and a 'javac X' line.
+probe_javac_version() {
+  local out
+  out="$("$1" -version 2>&1)" || return 1
+  grep -Eo '^javac [0-9]+(\.[0-9]+)*' <<<"${out}" | head -n 1 | cut -d' ' -f2
+}
+
+java_install_hint() {
+  hint "install a JDK ${JAVA_MIN} (for example Eclipse Temurin 21) and put its bin/ on PATH or set JAVA_HOME"
+}
+
 check_java() {
-  local java_cmd javac_cmd
+  local build_java build_javac runtime_java source
+  runtime_java="$(command -v java || true)"
   if [[ -n "${JAVA_HOME:-}" ]]; then
-    java_cmd="${JAVA_HOME}/bin/java"
-    javac_cmd="${JAVA_HOME}/bin/javac"
-    echo "[info] JAVA_HOME is set; Gradle will use ${JAVA_HOME}"
+    build_java="${JAVA_HOME}/bin/java"
+    build_javac="${JAVA_HOME}/bin/javac"
+    source="JAVA_HOME (${JAVA_HOME}/bin)"
+    echo "[info] JAVA_HOME is set; Gradle will use ${JAVA_HOME}, services start with the java on PATH"
   else
-    java_cmd="$(command -v java || true)"
-    javac_cmd="$(command -v javac || true)"
+    build_java="${runtime_java}"
+    build_javac="$(command -v javac || true)"
+    source="PATH"
   fi
 
-  if [[ -z "${java_cmd}" || ! -x "${java_cmd}" ]]; then
-    fail "java not found${JAVA_HOME:+ in JAVA_HOME (${JAVA_HOME}/bin/java)}"
-    hint "install a JDK 21 (for example Eclipse Temurin 21) and put its bin/ on PATH or set JAVA_HOME"
-    return
-  fi
-
-  local java_out java_ver java_maj
-  java_out="$("${java_cmd}" -version 2>&1 || true)"
-  java_ver="$(first_version "$(grep -i 'version' <<<"${java_out}" | head -n 1)")"
-  if [[ -z "${java_ver}" ]]; then
-    fail "could not read a version from '${java_cmd} -version'"
-    hint "check that ${java_cmd} runs on this machine and architecture"
-    return
-  fi
-  java_maj="$(java_major "${java_ver}")"
-  if (( java_maj < 21 )); then
-    fail "java ${java_ver} is too old; the Java services target Java 21 (sourceCompatibility 21)"
-    hint "install a JDK 21+ and make it first on PATH or set JAVA_HOME"
+  # Build JDK runtime (the JVM Gradle runs on).
+  local java_ver="" java_maj=""
+  if [[ -z "${build_java}" || ! -x "${build_java}" ]]; then
+    fail "java not found in ${source}"
+    java_install_hint
+  elif ! java_ver="$(probe_java_version "${build_java}")" || [[ -z "${java_ver}" ]]; then
+    java_ver=""
+    fail "'${build_java} -version' failed or printed no Java version line"
+    hint "check that ${build_java} runs on this machine and architecture, and that JAVA_TOOL_OPTIONS/JDK_JAVA_OPTIONS are valid"
   else
-    ok "java ${java_ver} (${java_cmd})"
+    java_maj="$(java_major "${java_ver}")"
+    if (( java_maj < JAVA_MIN )); then
+      fail "java ${java_ver} is too old; the Java services target Java ${JAVA_MIN} (sourceCompatibility ${JAVA_MIN})"
+      hint "install a JDK ${JAVA_MIN}-${GRADLE_MAX_JAVA} and make it first on PATH or set JAVA_HOME"
+    elif (( java_maj > GRADLE_MAX_JAVA )); then
+      fail "java ${java_ver} is too new for the Gradle 8.14 wrapper, which runs on Java ${JAVA_MIN}-${GRADLE_MAX_JAVA}"
+      hint "use a JDK ${JAVA_MIN}-${GRADLE_MAX_JAVA} for builds (set JAVA_HOME to it)"
+    else
+      ok "java ${java_ver} (${build_java}, Gradle build JDK)"
+    fi
   fi
 
-  if [[ -z "${javac_cmd}" || ! -x "${javac_cmd}" ]]; then
-    fail "javac not found: ${java_cmd} looks like a JRE, but Gradle builds need a JDK compiler"
-    hint "install a full JDK 21 (not a JRE) and put its bin/ on PATH or set JAVA_HOME"
-    return
-  fi
-
-  local javac_out javac_ver javac_maj
-  javac_out="$("${javac_cmd}" -version 2>&1 || true)"
-  javac_ver="$(first_version "${javac_out}")"
-  if [[ -z "${javac_ver}" ]]; then
-    fail "could not read a version from '${javac_cmd} -version'"
-    return
-  fi
-  javac_maj="$(java_major "${javac_ver}")"
-  if (( javac_maj < 21 )); then
-    fail "javac ${javac_ver} is too old; Java 21 sources need javac 21+"
-    hint "install a JDK 21+ and make it first on PATH or set JAVA_HOME"
-  elif (( javac_maj != java_maj )); then
-    fail "javac ${javac_ver} and java ${java_ver} come from different JDKs"
-    hint "use one JDK 21+ for both: point PATH or JAVA_HOME at a single JDK bin/"
+  # Build JDK compiler; checked even when the runtime above is missing.
+  local javac_ver javac_maj
+  if [[ -z "${build_javac}" || ! -x "${build_javac}" ]]; then
+    if [[ -n "${java_ver}" ]]; then
+      fail "javac not found: ${build_java} looks like a JRE, but Gradle builds need a JDK compiler"
+    else
+      fail "javac not found in ${source}; Gradle builds need a JDK compiler"
+    fi
+    hint "install a full JDK ${JAVA_MIN} (not a JRE) and put its bin/ on PATH or set JAVA_HOME"
+  elif ! javac_ver="$(probe_javac_version "${build_javac}")" || [[ -z "${javac_ver}" ]]; then
+    fail "'${build_javac} -version' failed or printed no javac version line"
   else
-    ok "javac ${javac_ver} (${javac_cmd})"
+    javac_maj="$(java_major "${javac_ver}")"
+    if (( javac_maj < JAVA_MIN )); then
+      fail "javac ${javac_ver} is too old; Java ${JAVA_MIN} sources need javac ${JAVA_MIN}+"
+      hint "install a JDK ${JAVA_MIN}-${GRADLE_MAX_JAVA} and make it first on PATH or set JAVA_HOME"
+    elif (( javac_maj > GRADLE_MAX_JAVA )); then
+      fail "javac ${javac_ver} is too new for the Gradle 8.14 wrapper, which runs on Java ${JAVA_MIN}-${GRADLE_MAX_JAVA}"
+      hint "use a JDK ${JAVA_MIN}-${GRADLE_MAX_JAVA} for builds (set JAVA_HOME to it)"
+    elif [[ -n "${java_maj}" ]] && (( javac_maj != java_maj )); then
+      fail "javac ${javac_ver} and java ${java_ver} come from different JDKs"
+      hint "use one JDK ${JAVA_MIN}+ for both: point PATH or JAVA_HOME at a single JDK bin/"
+    else
+      ok "javac ${javac_ver} (${build_javac})"
+    fi
+  fi
+
+  # Service runtime: the process catalog starts Java services with bare
+  # 'java -jar', which resolves through PATH and ignores JAVA_HOME.
+  if [[ -n "${JAVA_HOME:-}" ]]; then
+    local run_ver run_maj
+    if [[ -z "${runtime_java}" ]]; then
+      fail "java not found on PATH; services start with bare 'java -jar', which does not use JAVA_HOME"
+      hint "add ${JAVA_HOME}/bin to PATH"
+    elif [[ "${runtime_java}" -ef "${build_java}" ]]; then
+      ok "java on PATH is the JAVA_HOME java (service runtime)"
+    elif ! run_ver="$(probe_java_version "${runtime_java}")" || [[ -z "${run_ver}" ]]; then
+      fail "'${runtime_java} -version' failed or printed no Java version line (java on PATH starts the services)"
+      hint "add ${JAVA_HOME}/bin to the front of PATH"
+    else
+      run_maj="$(java_major "${run_ver}")"
+      if (( run_maj < JAVA_MIN )); then
+        fail "java ${run_ver} on PATH (${runtime_java}) is too old to run the services; JAVA_HOME only affects Gradle"
+        hint "add ${JAVA_HOME}/bin to the front of PATH"
+      else
+        ok "java ${run_ver} on PATH (${runtime_java}, service runtime)"
+      fi
+    fi
   fi
 }
 
 check_node() {
+  local out
   if ! command -v node >/dev/null 2>&1; then
     fail "node not found"
     hint "install Node.js 22 LTS (supported: ^20.19 || ^22.12 || >=24, required by Angular 20)"
+  elif ! out="$(node --version 2>&1)" || ! [[ "${out}" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+    fail "'node --version' failed or did not print a vX.Y.Z version"
+    hint "check that node runs on this machine; reinstall Node.js 22 LTS if needed"
   else
-    local ver major minor rest supported=0
-    ver="$(first_version "$(node --version 2>&1 || true)")"
-    major="${ver%%.*}"
-    rest="${ver#*.}"
-    minor="${rest%%.*}"
-    if [[ -z "${ver}" || "${major}" == "${ver}" ]]; then
-      fail "could not read a version from 'node --version'"
+    local ver="${out#v}" major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}"
+    if (( major >= 24 )) || { (( major == 22 )) && (( minor >= 12 )); } || { (( major == 20 )) && (( minor >= 19 )); }; then
+      ok "node ${ver}"
     else
-      if (( major >= 24 )) || { (( major == 22 )) && (( minor >= 12 )); } || { (( major == 20 )) && (( minor >= 19 )); }; then
-        supported=1
-      fi
-      if (( supported )); then
-        ok "node ${ver}"
-      else
-        fail "node ${ver} is not supported by the Angular 20 front end"
-        hint "install Node.js 22 LTS (supported: ^20.19 || ^22.12 || >=24)"
-      fi
+      fail "node ${ver} is not supported by the Angular 20 front end"
+      hint "install Node.js 22 LTS (supported: ^20.19 || ^22.12 || >=24)"
     fi
   fi
 
   if ! command -v npm >/dev/null 2>&1; then
     fail "npm not found"
     hint "npm ships with Node.js; reinstall Node.js 22 LTS or add its bin/ to PATH"
+  elif ! out="$(npm --version 2>/dev/null)" || ! [[ "${out}" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    fail "'npm --version' failed or did not print an X.Y.Z version"
+    hint "reinstall Node.js 22 LTS so npm matches it"
   else
-    local npm_ver
-    npm_ver="$(first_version "$(npm --version 2>&1 || true)")"
-    if [[ -z "${npm_ver}" ]]; then
-      fail "could not read a version from 'npm --version'"
-    else
-      ok "npm ${npm_ver}"
-    fi
+    ok "npm ${out}"
   fi
 }
 
@@ -159,19 +208,24 @@ check_dotnet() {
   fi
 
   local sdks runtimes
-  sdks="$(dotnet --list-sdks 2>/dev/null || true)"
-  runtimes="$(dotnet --list-runtimes 2>/dev/null || true)"
-
-  if grep -Eq '^9\.' <<<"${sdks}"; then
-    ok "dotnet SDK $(grep -E '^9\.' <<<"${sdks}" | head -n 1 | cut -d' ' -f1)"
+  if ! sdks="$(dotnet --list-sdks 2>/dev/null)"; then
+    fail "'dotnet --list-sdks' failed, so the .NET SDK 9.x cannot be confirmed"
+    hint "repair or reinstall the .NET 9 SDK for this CPU architecture"
+  elif grep -Eq '^9\.[0-9]+\.[0-9]+ \[' <<<"${sdks}"; then
+    ok "dotnet SDK $(grep -E '^9\.[0-9]+\.[0-9]+ \[' <<<"${sdks}" | head -n 1 | cut -d' ' -f1)"
   else
     fail ".NET SDK 9.x not found (found: $(cut -d' ' -f1 <<<"${sdks}" | tr '\n' ' ' | sed 's/ *$//;s/^$/none/'))"
     hint "'dotnet build' for people-service needs the .NET 9 SDK, not only a runtime"
   fi
 
+  if ! runtimes="$(dotnet --list-runtimes 2>/dev/null)"; then
+    fail "'dotnet --list-runtimes' failed, so the .NET 9 runtimes cannot be confirmed"
+    hint "repair or reinstall the .NET 9 SDK for this CPU architecture"
+    return
+  fi
   local runtime
   for runtime in Microsoft.NETCore.App Microsoft.AspNetCore.App; do
-    if grep -Eq "^${runtime} 9\." <<<"${runtimes}"; then
+    if grep -Eq "^${runtime} 9\.[0-9]+\.[0-9]+ \[" <<<"${runtimes}"; then
       ok "${runtime} $(grep -E "^${runtime} 9\." <<<"${runtimes}" | head -n 1 | cut -d' ' -f2)"
     else
       fail "${runtime} 9.x runtime not found"
@@ -193,17 +247,37 @@ check_simple_tool() {
   fi
 }
 
+# Startup waits on 'nc -z localhost <port>'. Confirm -z is supported without
+# touching the network: 'nc -h' only prints usage (BSD/OpenBSD/BusyBox all list
+# their flags there), so a usage text that never mentions -z is a blocker.
+check_netcat() {
+  local install_hint="install a netcat that supports -z (for example 'apt-get install netcat-openbsd'; macOS ships nc)"
+  if ! command -v nc >/dev/null 2>&1; then
+    fail "nc not found (used by start/status scripts to probe service ports with 'nc -z')"
+    hint "${install_hint}"
+    return
+  fi
+  local help
+  help="$(nc -h 2>&1 </dev/null || true)"
+  if grep -Eq '(^|[[:space:][])-[[:alnum:]]*z([],[:space:]]|$)' <<<"${help}"; then
+    ok "nc ($(command -v nc), supports -z)"
+  else
+    fail "nc ($(command -v nc)) does not list -z in 'nc -h'; start/status port probes need 'nc -z'"
+    hint "${install_hint}"
+  fi
+}
+
 echo "TraderX state 001 prerequisite doctor (read-only; no installs, no network, no startup)"
 check_java
 check_node
 check_dotnet
 check_simple_tool rsync "used by state generation to copy the Angular front end" \
   "install rsync with your OS package manager (for example 'brew install rsync' or 'apt-get install rsync')"
-check_simple_tool nc "used by start/status scripts to probe service ports with 'nc -z'" \
-  "install a netcat that supports -z (for example 'apt-get install netcat-openbsd'; macOS ships nc)"
+check_netcat
 check_simple_tool jq "used by state generation to read catalog/state-catalog.json" \
   "install jq with your OS package manager"
 if [[ "${TRADERSPEC_SKIP_NETWORK_CHECK:-0}" == "1" ]]; then
+  # FR-025 exception: with the start script's network preflight skipped, curl is not used.
   check_simple_tool curl "start script network preflight is skipped by TRADERSPEC_SKIP_NETWORK_CHECK=1" \
     "install curl if you later run with the network preflight enabled" warn
 else
@@ -216,5 +290,11 @@ if (( BLOCKERS > 0 )); then
   echo "[result] ${BLOCKERS} blocker(s), ${WARNINGS} warning(s): fix the [fail] lines above before building state 001"
   exit 1
 fi
-echo "[result] no blockers (${WARNINGS} warning(s)). Next: bash pipeline/generate-state.sh 001-baseline-uncontainerized-parity, then ./scripts/start-base-uncontainerized-generated.sh --build-only"
+if [[ -f "${ROOT}/pipeline/generate-state.sh" ]]; then
+  next="bash pipeline/generate-state.sh 001-baseline-uncontainerized-parity, then ./scripts/start-base-uncontainerized-generated.sh --build-only"
+else
+  # Generated checkout: already generated, so build directly.
+  next="./scripts/start-base-uncontainerized-generated.sh --build-only"
+fi
+echo "[result] no blockers (${WARNINGS} warning(s)). Next: ${next}"
 exit 0

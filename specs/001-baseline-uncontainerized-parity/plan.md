@@ -100,9 +100,9 @@ Use public Boot 4.0.8 with its Framework 7.0.9/Data JPA 4.0.7 baseline and Tomca
 ## Prerequisite doctor (#1)
 
 Add a standalone, read-only `scripts/doctor-base-uncontainerized-prerequisites.sh`
-(FR-025, FR-026, NFR-013) that only runs version/listing commands
+(FR-025 to FR-028, NFR-013) that only runs version/listing commands
 (`java -version`, `javac -version`, `node --version`, `npm --version`,
-`dotnet --version|--list-sdks|--list-runtimes`, `command -v`). Supported
+`dotnet --version|--list-sdks|--list-runtimes`, `nc -h`, `command -v`). Supported
 versions come from existing canonical sources: Java 21 from template
 `sourceCompatibility`, Node.js from the Angular 20 engine range, .NET 9 from the
 people-service `net9.0` target and the start script runtime checks. The start
@@ -113,3 +113,16 @@ guide generator adds a "Check Prerequisites" step so the run order is
 documented. `scripts/test-base-uncontainerized-prerequisite-doctor.sh` covers
 available, missing and incompatible tools with isolated stub executables
 (SC-018). No API or event contracts change.
+
+Probe hardening (FR-025 to FR-028): every probe must exit `0` and print an
+anchored version line before its version is parsed, and `dotnet --list-*`
+failures are blockers. When `JAVA_HOME` is set, the doctor checks it as the
+Gradle build JDK and separately checks the `java` on `PATH`, because the process
+catalog launches services with bare `java -jar` and the start script does not
+prepend `JAVA_HOME/bin`. The accepted build JDK range is 21 to 24, the range
+the Gradle 8.14.5 wrapper in `templates/gradle-wrapper` runs on; raise it with
+the wrapper. `nc -h` usage text must list `-z`, matching `wait_for_port`, with no
+socket opened. The `TRADERSPEC_SKIP_NETWORK_CHECK=1` curl warning is written into
+FR-025. The success line names `--build-only` alone when
+`pipeline/generate-state.sh` is absent (generated checkout). The start script is
+still unchanged.

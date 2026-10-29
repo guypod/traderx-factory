@@ -95,3 +95,7 @@ description: "Tasks for root-level Spec Kit simple app baseline adoption"
 - [x] Add `scripts/test-base-uncontainerized-prerequisite-doctor.sh` with isolated stubs for healthy, JRE-only, Java 8, mixed JDK, Node 18, missing npm, missing/unrunnable dotnet, old .NET, missing rsync/nc and multi-blocker scenarios.
 - [x] Ship the doctor in state 001 generated runtime harness and document supported versions and run order through the catalog-driven learning guide and the quickstart.
 - [x] Run front-matter, root SpecKit, readiness and spec-coverage gates plus the doctor test; record what could not run locally.
+- [x] Require successful, anchored version/listing probes (FR-027) with regression cases for nonzero exits with plausible output and misleading numeric stderr for java, javac, node, npm and `dotnet --list-sdks|--list-runtimes`.
+- [x] Check the `PATH` java used by `java -jar` separately from the `JAVA_HOME` Gradle JDK, with split-environment cases (JAVA_HOME 21 with PATH Java 8, no PATH java, same JDK, JAVA_HOME 8).
+- [x] Cap the build JDK at Java 24 for the Gradle 8.14 wrapper, report a missing `javac` when `java` is also missing, require `nc -z` support, and record the `TRADERSPEC_SKIP_NETWORK_CHECK=1` curl exception in FR-025.
+- [x] Make the success next step valid in generated checkouts (FR-028) and test both checkouts.
