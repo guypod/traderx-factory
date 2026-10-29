@@ -12,6 +12,7 @@ lenses:
       - generated/**
       - .github/workflows/**
       - tools/**
+      - scripts/**
       - docs/spec-kit/**
       - catalog/**
       - AGENTS.md
